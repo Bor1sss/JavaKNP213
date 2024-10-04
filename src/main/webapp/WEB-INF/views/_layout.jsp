@@ -35,6 +35,9 @@
           <li class="nav-item">
             <a class="nav-link <%= "web_xml.jsp".equals( pageBody ) ? "active" : ""%>" href="<%=contextPath%>/web-xml">WebXml</a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link" href="<%=contextPath%>/shop.jsp">Крамниця</a>
+          </li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Dropdown

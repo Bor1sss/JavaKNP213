@@ -1,4 +1,10 @@
 <%@ page contentType="text/html;charset=UTF-8"  %>
+
+<h2>Випадкові імена файлів</h2>
+<p>Ім'я файлу за замовчанням: <%= request.getAttribute("randomFileNameDefault") %></p>
+<p>Ім'я файлу довжиною 12 символів: <%= request.getAttribute("randomFileNameWithLength") %></p>
+
+
 <h1>Java web. JSP</h1>
 <img src="img/Java_Logo.svg" alt="logo" style="height: 200px">
 <i>Контроль інжекції хешу: <%= request.getAttribute("hash") %></i>
