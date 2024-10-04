@@ -1,6 +1,7 @@
 <%@ page contentType="text/html;charset=UTF-8"  %>
 <h1>Java web. JSP</h1>
 <img src="img/Java_Logo.svg" alt="logo" style="height: 200px">
+<i>Контроль інжекції хешу: <%= request.getAttribute("hash") %></i>
 <p>
     JSP - Java Server Pages - технологія веб-розробки з динамічним
     формуванням HTML сторінок. Аналогічно до PHP, ранніх ASP є
@@ -56,7 +57,7 @@ double[] prices = { 10.0, 20.0, 30.0, 40.0 };
     &lt;% } %&gt;
 </pre>
 &rarr;
-<% for (int i = 0; i < prices. length; i++) { %>
+<% for (int i = 0; i < prices.length; i++) { %>
 <i><%= prices[i] %></i>&emsp;
 <% } %>
 
@@ -64,9 +65,30 @@ double[] prices = { 10.0, 20.0, 30.0, 40.0 };
 &lt;jsp:include page="WEB-INF/fragment.jsp" /&gt; &rarr;
 <jsp:include page="../fragment.jsp" />
 
-Д.3. Реалізувати виведення масиву double[] prices у вигляді HTML-таблиці
-1 10,0
-2 20,0
-...
-Створити файл "not_found.jsp", реалізувати у ньому сторінку 404
+<p>
+    Д.3. Реалізувати виведення масиву double[] prices у вигляді HTML-таблиці
+    1 10,0
+    2 20,0
+    ...
+    Створити файл "not_found.jsp", реалізувати у ньому сторінку 404
+</p>
+
+
+<h1>Prices</h1>
+<table border="1">
+    <tr>
+        <th>#</th>
+        <th>Price</th>
+    </tr>
+    <%
+        for (int i = 0; i < prices.length; i++) {
+    %>
+    <tr>
+        <td><%= i + 1 %></td>
+        <td><%= prices[i] %></td>
+    </tr>
+    <%
+        }
+    %>
+</table>
 
