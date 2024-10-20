@@ -2,12 +2,15 @@ package itstep.learning.dal.dao;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import itstep.learning.dal.dto.Token;
+import itstep.learning.dal.dto.User;
 import itstep.learning.kdf.KdfService;
+import itstep.learning.models.SignupFormModel;
 import itstep.learning.services.db.DbService;
 
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
+import java.util.Date;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 @Singleton
@@ -23,6 +26,130 @@ public class AuthDao {
         this.kdfService = kdfService;
     }
 
+    public User signUp(SignupFormModel model) {
+        if(model == null)
+        {
+            return null;
+        }
+        User user = new User();
+        user.setUserId(UUID.randomUUID());
+        user.setUserName(model.getName());
+        user.setEmail(model.getEmail());
+        user.setPhone(model.getPhone());
+        user.setBirthdate(model.getBirthdate());
+        user.setAvatarUrl(model.getAvatar());
+
+        String sql = "INSERT INTO `users` " +
+                "(`user_id` , `user_name`, `email`, `phone` , `avatar_url`, `birthdate`)" +
+                "VALUES (?, ?, ?, ?, ?,?)";
+
+        try(PreparedStatement prep = dbService.getConnection().prepareStatement(sql))
+        {
+            prep.setString( 1, user.getUserId().toString() );
+            prep.setString( 2, user.getUserName() );
+            prep.setString( 3, user.getEmail() );
+            prep.setString( 4, user.getPhone() );
+            prep.setString( 5, user.getAvatarUrl() );
+            prep.setTimestamp( 6, new Timestamp( user.getBirthdate().getTime() ) );
+            prep.executeUpdate ();
+        }
+        catch (SQLException ex)
+        {
+            logger.warning(ex.getMessage() + " -- " + sql);
+            return null;
+        }
+
+        String salt = UUID.randomUUID().toString().substring(0, 16);
+        String password = model.getPassword();
+        String dk = kdfService.dk(password, salt);
+
+        sql = "INSERT INTO `users_access`(`user_id`,`login`,`salt`,`dk`) " +
+                "VALUES (?, ?, ?, ?) ";
+
+        try(PreparedStatement prep = dbService.getConnection().prepareStatement(sql))
+        {
+            prep.setString( 1, user.getUserId().toString() );
+            prep.setString( 2, user.getUserName() );
+            prep.setString( 3, salt );
+            prep.setString( 4, dk );
+            prep.executeUpdate ();
+        }
+        catch (SQLException ex)
+        {
+            logger.warning(ex.getMessage() + " -- " + sql);
+            // TODO: Delete user
+            return null;
+        }
+        return user;
+    }
+
+    public User authenticate(String login, String password) {
+        String sql = "SELECT * FROM users_access a" +
+                " JOIN users u ON a.user_id = u.user_id\n" +
+                " JOIN users_roles r ON a.role_id = r.role_id" +
+                " LEFT JOIN tokens t on a.user_id = t.user_id AND t.exp  > CURRENT_TIMESTAMP" +
+                " WHERE a. login = ?";
+
+        try (PreparedStatement prep = dbService.getConnection().prepareStatement(sql))
+        {
+            prep.setString(1, login);
+            ResultSet rs = prep.executeQuery();
+            if (rs.next()) { // є такий login
+                String salt = rs.getString( "salt");
+                String dk = rs.getString( "dk");
+                // повторюємо процедуру DK і перевіряємо чи збігаються результати перетворень
+                if(kdfService.dk(password, salt).equals(dk))
+                {
+                    User user = new User(rs);
+                    Token token;
+                    try
+                    {
+                        token = new Token(rs);
+                    }
+                    catch (SQLException ignored)
+                    {
+                        token = null;
+                    }
+                    if(token == null)
+                    {
+                        // створюємо новий токен для користувача
+                        token = this.createToken(user);
+                    }
+                    user.setToken(token);
+                    return user;
+                }
+            }
+        } catch (SQLException ex) {
+            logger.warning(ex.getMessage() + " -- " + sql);
+        }
+        return null;
+    }
+
+    public Token createToken(User user)
+    {
+        Token token = new Token();
+        token.setTokenId(UUID.randomUUID());
+        token.setUserId(user.getUserId());
+        token.setIat(new Date(System.currentTimeMillis()));
+        token.setExp(new Date(System.currentTimeMillis() + 1000 * 86400));
+        String sql = "INSERT INTO tokens (token_id, user_id, iat, exp) " +
+                " VALUES (?, ?, ?, ?)";
+
+        try(PreparedStatement prep = dbService.getConnection().prepareStatement(sql))
+        {
+            prep.setString(1, token.getTokenId().toString());
+            prep.setString(2, token.getUserId().toString());
+            prep.setTimestamp(3, new Timestamp(token.getIat().getTime()));
+            prep.setTimestamp(4, new Timestamp(token.getExp().getTime()));
+            prep.executeUpdate();
+            return token;
+        }
+        catch (SQLException ex) {
+            logger.warning(ex.getMessage() + " -- " + sql);
+        }
+        return null;
+    }
+
     public boolean install()
     {
         String sql = "CREATE TABLE IF NOT EXISTS `users` (" +
@@ -30,7 +157,7 @@ public class AuthDao {
                 " `user_name`   VARCHAR(64)          NOT NULL," +
                 " `email`       VARCHAR(128)         NOT NULL," +
                 " `phone`       VARCHAR(16)          NULL," +
-                " `avatar_url`  VARCHAR(128)         NULL," +
+                " `avatar_url`  VARCHAR(256)         NULL," +
                 " `birthdate`   DATETIME             NOT NULL," +
                 " `delete_dt`   DATETIME             NULL" +
                 ") ENGINE=InnoDB default CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
@@ -50,7 +177,7 @@ public class AuthDao {
                 "`login`     VARCHAR(32)  NOT NULL," +
                 "`salt`      CHAR(16)         NULL," +
                 "`dk`        CHAR(20)         NULL," +
-                "`role_id`   CHAR(36)     NOT NULL," +
+                "`role_id`   CHAR(36)     NOT NULL DEFAULT 'acffa6f6-89f9-11ef-a6bd-6f31a5ab6a0f'," +
                 "`is_active` TINYINT      DEFAULT 1" +
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
@@ -118,6 +245,20 @@ public class AuthDao {
             return false;
         }
 
+        sql = "INSERT INTO `users_roles`(`role_id`,`role_name`,`can_create`,`can_read`,`can_update`,`can_delete`) " +
+                "VALUES ('acffa6f6-89f9-11ef-a6bd-6f31a5ab6a0f','Guest',0,1,0,0) " +
+                "ON DUPLICATE KEY UPDATE " +
+                "`role_name` = 'Guest', " +
+                "`can_create` = 0, `can_read` = 1,`can_update` = 0,`can_delete` = 0";
+
+        try(Statement stmt = dbService.getConnection().createStatement())
+        {
+            stmt.executeUpdate(sql);
+        } catch (SQLException ex) {
+            logger.warning(ex.getMessage() + "--" + sql);
+            return false;
+        }
+
 
         sql = "INSERT INTO `users`(`user_id`,`user_name`,`email`,`birthdate`,`delete_dt`) " +
                 "VALUES ('7dd7d8a9-815e-11ef-bb48-fcfbf6dd7098','Administrator','admin@change.me','1970-01-01',NULL) " +
@@ -146,9 +287,9 @@ public class AuthDao {
                 "'81661d9f-815d-11ef-bb48-fcfbf6dd7098'," +
                 "'admin', ?, ?, 1) " +
                 "ON DUPLICATE KEY UPDATE " +
-                "`user_id` = 'Administrator', " +
-                "`role_id` = 'admin@change.me', " +
-                "`login` = '1970-01-01'," +
+                "`user_id` = '7dd7d8a9-815e-11ef-bb48-fcfbf6dd7098', " +
+                "`role_id` = '81661d9f-815d-11ef-bb48-fcfbf6dd7098', " +
+                "`login` = 'admin'," +
                 "`salt` = ?," +
                 "`dk` = ?," +
                 "`is_active` = 1";
