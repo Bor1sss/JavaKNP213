@@ -133,3 +133,26 @@
     right: 0.5vw;
     width: 3vw;
 }
+
+.product-page-left img {
+    width: 90%;
+}
+
+.scale-75 {
+    transform: scale(.75);
+}
+
+.cart-row picture {
+    width: 100%;
+}
+
+.cart-row img {
+    width: 100%;
+}
+
+.cart-widget-quantity {
+    background-color: aquamarine;
+    border-radius: 50%;
+    display: inline-block;
+    padding: 0 0.5em;
+}
