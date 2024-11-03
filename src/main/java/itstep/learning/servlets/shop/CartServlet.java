@@ -11,22 +11,27 @@ import itstep.learning.dal.dto.shop.Product;
 import itstep.learning.rest.RestMetaData;
 import itstep.learning.rest.RestResponse;
 import itstep.learning.rest.RestServlet;
+import itstep.learning.services.stream.StreamService;
+import sun.tools.jar.Manifest;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.Date;
+import java.io.InputStream;
+import java.util.*;
 
 @Singleton
 public class CartServlet extends RestServlet {
     private final CartDao cartDao;
     private final ProductDao productDao;
+    private final StreamService streamService;
 
     @Inject
-    public CartServlet(CartDao cartDao, ProductDao productDao) {
+    public CartServlet(CartDao cartDao, ProductDao productDao, StreamService streamService) {
         this.cartDao = cartDao;
         this.productDao = productDao;
+        this.streamService = streamService;
     }
 
 
@@ -40,19 +45,94 @@ public class CartServlet extends RestServlet {
                         .setServerTime(new Date())
                         .setAllowedMethods(new String[]{"GET", "POST", "PUT", "DELETE", "OPTIONS"})
         );
-
         super.service(req, resp);
+    }
+
+    private void doPatch(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        User user = (User) req.getAttribute("auth-token-user");
+        if(user == null) {
+            super.sendResponse(401);
+            return;
+
+        }
+        Cart openCart = cartDao.getCartByUser(user, true);
+        String json = streamService.readAsString( req.getInputStream() );
+        CartItem[] cartItems = super.gson.fromJson(json, CartItem[].class);
+        List<CartItem> presentItems = new ArrayList<>();
+        List<CartItem> absentItems = new ArrayList<>();
+
+        for(CartItem cartItem : cartItems) {
+            UUID productId = cartItem.getProductId();
+            if( productId == null  ){
+                super. sendResponse( 400, "Missing item data 'product-id'" );
+                return;
+            }
+            Product product = productDao.getByIdOrSlug( productId.toString() );
+            if( product == null ) {
+                presentItems.add( cartItem );
+                continue;
+            }
+            cartItem.setProduct(product);
+            int inCart = 0;
+            if (openCart != null) {
+                Optional<CartItem> ci = Arrays
+                        .stream(openCart.getCartItems())
+                        .filter(i -> i.getProductId().equals(productId))
+                        .findFirst();
+                if( ci.isPresent() ) {
+                    inCart = ci.get().getQuantity();
+                }
+            }
+            if( product. getQuantity() < cartItem. getQuantity() +inCart ) {
+// перевірка на достатню кількість / наявність товарів
+                if (product.getQuantity() > 0) {
+// те, що є додаємо до кошику, а залишок (дозамовлення)
+// переносимо до відсутніх елементів
+                    CartItem item = new CartItem();
+                    item.setProduct(product);
+                    item.setQuantity(product.getQuantity() - inCart);
+                    presentItems.add(item);
+                    cartItem.setQuantity(cartItem.getQuantity() + inCart -
+                            product.getQuantity());
+                }
+                absentItems.add(cartItem);
+            }
+        }
+
+        try
+        {
+            for(CartItem cartItem : presentItems) {
+                cartDao.add(user, cartItem.getProduct(), cartItem.getQuantity());
+            }
+        }
+        catch (Exception ex)
+        {
+            super.sendResponse(200, ex.getMessage());
+            return;
+        }
+
+        super.sendResponse(200, cartItems);
     }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         User user = (User) req.getAttribute("auth-token-user");
         if (user != null) {
-            super.sendResponse(200, cartDao.getCartByUser(user, true));
+            if(req.getParameterMap().containsKey("all"))
+            {
+                super.sendResponse(200, cartDao.getCartsArrayByUser(user, false));
+                return;
+            }
+            else
+            {
+                super.sendResponse(200, cartDao.getCartByUser(user, true));
+                return;
+            }
         }
         else
         {
-            super.sendResponse(401, new CartItem[0]);
+            super.sendResponse(401, null);
+            return;
         }
     }
 

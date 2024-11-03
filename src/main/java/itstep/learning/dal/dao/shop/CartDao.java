@@ -61,8 +61,11 @@ public class CartDao {
         return true;
     }
 
+    public boolean add( User user, Product product ) throws Exception {
+        return add(user, product, 1);
+    }
 
-    public boolean add(User user, Product product) throws Exception {
+    public boolean add(User user, Product product, int count) throws Exception {
         if (user == null || product == null) {
             return false;
         }
@@ -90,12 +93,13 @@ public class CartDao {
 
         if (quantity == -1) {
             sql = "INSERT INTO cart_items (cart_item_quantity, cart_item_price, cart_id, product_id) " +
-                    "VALUES (1, ?, ?, ?)";
+                    "VALUES (?, ?, ?, ?)";
 
             try (PreparedStatement prep = dbService.getConnection().prepareStatement(sql)) {
-                prep.setDouble(1, product.getPrice());
-                prep.setString(2, cart.getId().toString());
-                prep.setString(3, product.getId().toString());
+                prep.setInt(   1, count);
+                prep.setDouble(2, product.getPrice());
+                prep.setString(3, cart.getId().toString());
+                prep.setString(4, product.getId().toString());
                 prep.executeUpdate();
                 return true;
             } catch (SQLException ex) {
@@ -107,7 +111,7 @@ public class CartDao {
         else
         {
             //якщо є - збільшуємо кількість
-            return update( cart.getId().toString(), product.getId().toString(), 1 );
+            return update( cart.getId().toString(), product.getId().toString(), count );
         }
 
     }
@@ -259,6 +263,46 @@ public class CartDao {
         catch( SQLException ex ) {
             logger.warning(ex.getMessage() + " -- " + sql);
         }
+    }
+
+    public Cart[] getCartsArrayByUser(User user, boolean withItems) {
+        List<Cart> carts = new ArrayList<>();
+        String sql = "SELECT * FROM carts c WHERE c.user_id = ?";
+        try (PreparedStatement prep = dbService.getConnection().prepareStatement(sql)) {
+            prep.setString(1, user.getUserId().toString());
+            ResultSet rs = prep.executeQuery();
+            while (rs.next()) {
+                carts.add(new Cart(rs));
+            }
+            rs.close();
+        } catch (SQLException ex) {
+            logger.warning(ex.getMessage() + "--" + sql);
+            return null;
+        }
+        if( withItems ) {
+            for (Cart cart : carts) {
+                cart.setCartItems(itemsFromCart(cart));
+            }
+        }
+        return carts.toArray(new Cart[0]);
+    }
+
+    private CartItem[] itemsFromCart( Cart cart ) {
+            List<CartItem> cartItems = new ArrayList<>();
+        String sql = "SELECT * FROM cart_items ci JOIN products p ON ci.product_id = p.product_id " +
+        "WHERE ci.cart_id = ? AND ci.cart_item_quantity > 0";
+        try( PreparedStatement prep = dbService. getConnection().prepareStatement(sql) ) {
+            prep.setString( 1, cart.getId().toString() );
+            ResultSet rs = prep. executeQuery();
+            while( rs.next() ) {
+                cartItems.add( new CartItem( rs ) );
+            }
+            rs.close();
+        } catch (SQLException ex) {
+            logger.warning(ex.getMessage() + "--" + sql);
+            return null;
+        }
+        return cartItems.toArray(new CartItem[0]);
     }
 }
 

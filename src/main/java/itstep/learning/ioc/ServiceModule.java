@@ -15,6 +15,8 @@ import itstep.learning.services.hash.HashService;
 import itstep.learning.services.hash.Md5HashService;
 import itstep.learning.services.storage.LocalStorageService;
 import itstep.learning.services.storage.StorageService;
+import itstep.learning.services.stream.StreamService;
+import itstep.learning.services.stream.StreamServiceImpl1;
 
 public class ServiceModule extends AbstractModule {
     @Override
@@ -25,6 +27,7 @@ public class ServiceModule extends AbstractModule {
         bind(RandomLength.class).to(FileNameService.class);
         bind(StorageService.class).to(LocalStorageService.class);
         bind(DbService.class).to(MySqlDbService.class);
+        bind(StreamService.class).to(StreamServiceImpl1.class);
         //bind(DbService.class).annotatedWith(Names.named("Oracle")).to(OracleDbService.class);
     }
 }
